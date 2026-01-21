@@ -1,0 +1,5 @@
+{
+  "name": "AI SAM VideoReport",
+  "description": "Educational video content generator using Gemini to create scripts, storyboards, images, videos, and voiceovers from documents.",
+  "requestFramePermissions": []
+}
