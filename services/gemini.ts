@@ -4,8 +4,15 @@ import { PlanResponseItem, StoryboardFrame, FrameType } from "../types";
 import { decode, decodeAudioData, audioBufferToWav } from "./audioUtils";
 
 const getClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const key = process.env.API_KEY || process.env.GEMINI_API_KEY;
+  if (!key) {
+      console.warn("API Key is missing. Please select an API key using the dialog.");
+  }
+  return new GoogleGenAI({ apiKey: key || '' });
 };
+
+// Explicitly set a stable voice to prevent inconsistency
+const VOICE_NAME = 'Zephyr';
 
 export interface FileData {
   mimeType: string;
@@ -76,7 +83,8 @@ export const generateFrameImage = async (prompt: string): Promise<string> => {
     },
     config: {
         imageConfig: {
-            aspectRatio: "16:9"
+            aspectRatio: "16:9",
+            imageSize: "2K"
         }
     }
   });
@@ -99,7 +107,7 @@ export const generateFrameVideo = async (prompt: string): Promise<string> => {
     prompt: prompt,
     config: {
       numberOfVideos: 1,
-      resolution: '720p',
+      resolution: '1080p',
       aspectRatio: '16:9'
     }
   });
@@ -131,7 +139,7 @@ export const generateFrameAudio = async (text: string): Promise<string> => {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Kore' } // 'Kore' is a standard voice, assuming availability or fallback
+          prebuiltVoiceConfig: { voiceName: VOICE_NAME }
         }
       }
     }

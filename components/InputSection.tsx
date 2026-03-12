@@ -2,14 +2,15 @@ import React, { useState, useRef, ChangeEvent } from 'react';
 import mammoth from 'mammoth';
 
 interface InputSectionProps {
-  onPlanGenerate: (text: string, file?: { mimeType: string, data: string }) => void;
+  // Updated signature to pass original File object
+  onPlanGenerate: (text: string, fileData?: { mimeType: string, data: string }, originalFile?: File) => void;
   isLoading: boolean;
 }
 
 const InputSection: React.FC<InputSectionProps> = ({ onPlanGenerate, isLoading }) => {
   const [text, setText] = useState('');
   const [isDragging, setIsDragging] = useState(false);
-  const [attachedFile, setAttachedFile] = useState<{ name: string; mimeType: string; data: string } | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{ name: string; mimeType: string; data: string; original: File } | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,7 +47,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onPlanGenerate, isLoading }
           setAttachedFile({
             name: file.name,
             mimeType: 'application/pdf',
-            data: base64String
+            data: base64String,
+            original: file
           });
           setIsProcessingFile(false);
         };
@@ -58,6 +60,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onPlanGenerate, isLoading }
             const arrayBuffer = e.target?.result as ArrayBuffer;
             const result = await mammoth.extractRawText({ arrayBuffer });
             setText((prev) => (prev ? prev + '\n\n' : '') + result.value);
+            // DOCX doesn't support image extraction in this flow nicely yet, just text
             setAttachedFile(null);
           } catch (err) {
             console.error("Word parse error", err);
@@ -107,12 +110,12 @@ const InputSection: React.FC<InputSectionProps> = ({ onPlanGenerate, isLoading }
       <div className="text-center mb-12 animate-fadeIn">
         <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-4">
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600">
-            AI SAM VideoReport
+            KHNP 교육영상 제작 AI 시스템
           </span>
         </h1>
         <p className="text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-          복잡한 교육 자료를 업로드하세요. <br className="hidden md:block"/>
-          AI가 분석하여 <strong>대본, 이미지, 영상, 음성</strong>이 포함된 <br className="md:hidden"/>완벽한 비디오 리포트를 생성합니다.
+          교육 사례 자료를 업로드하세요. <br className="hidden md:block"/>
+          AI가 분석하여 <strong>대본, 이미지, 영상, 음성</strong>이 포함된 <br className="md:hidden"/>완벽한 교육용 영상을 생성합니다.
         </p>
       </div>
 
@@ -188,8 +191,10 @@ const InputSection: React.FC<InputSectionProps> = ({ onPlanGenerate, isLoading }
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                             </svg>
                         </div>
-                        <p className="text-lg font-medium text-slate-700 mb-1">파일을 여기에 드래그하거나 클릭하세요</p>
-                        <p className="text-sm text-slate-400">지원 형식: PDF, DOCX, TXT, MD</p>
+                        <p className="text-lg font-medium text-slate-700 mb-1">파일을 여기에 드래그로 옮겨놓거나, 여기를 클릭하여 파일을 선택하세요</p>
+                        <p className="text-sm text-slate-400">
+                            <strong>PDF(이미지 분석 가능)</strong>, DOCX/TXT(텍스트 분석만 가능)
+                        </p>
                     </div>
                 )}
             </div>
@@ -197,11 +202,11 @@ const InputSection: React.FC<InputSectionProps> = ({ onPlanGenerate, isLoading }
             {/* Text Area */}
             <div className="relative group">
                 <label className="absolute -top-3 left-4 bg-white px-2 text-xs font-bold text-slate-500 uppercase tracking-wide group-focus-within:text-indigo-600 transition-colors">
-                    직접 입력 또는 추가 지시사항
+                     추가 지시사항이 있는 경우 작성하세요(작성하지 않아도 정상 진행됩니다)
                 </label>
                 <textarea
                     className="w-full h-40 p-5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none resize-none text-slate-700 leading-relaxed placeholder-slate-400 shadow-sm"
-                    placeholder={attachedFile ? "파일이 첨부되었습니다. AI에게 추가로 지시할 사항이 있다면 입력하세요 (예: '챕터 2 내용을 중심으로 요약해줘')." : "위에 파일을 업로드 하거나, 이곳에 분석할 텍스트를 직접 붙여 넣으세요."}
+                    placeholder={attachedFile ? "파일이 첨부되었습니다. AI에게 추가로 지시할 사항이 있다면 입력하세요 (예: '챕터 2 내용을 중심으로 요약해줘')." : "추가 지시사항을 작성하세요. 파일을 업로드 했다면, 작성하지 않아도 괜찮습니다."}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     disabled={isLoading}
@@ -211,7 +216,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onPlanGenerate, isLoading }
             {/* Generate Button */}
             <div className="mt-8">
                 <button
-                onClick={() => onPlanGenerate(text, attachedFile ? { mimeType: attachedFile.mimeType, data: attachedFile.data } : undefined)}
+                // Pass original file if available
+                onClick={() => onPlanGenerate(text, attachedFile ? { mimeType: attachedFile.mimeType, data: attachedFile.data } : undefined, attachedFile?.original)}
                 disabled={isButtonDisabled}
                 className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg transition-all transform flex items-center justify-center gap-3 ${buttonClass}`}
                 >
