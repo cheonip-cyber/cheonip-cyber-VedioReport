@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StoryboardFrame, FrameType } from '../types';
+import { StoryboardFrame } from '../types';
 import { PLACEHOLDER_IMAGE } from '../constants';
 
 interface StoryboardProps {
@@ -44,8 +44,8 @@ const Storyboard: React.FC<StoryboardProps> = ({
     onUpdateFrame(frameId, { 
         visualSourceType: 'DOC', 
         visualUrl: imageUrl,
-        visualGenerated: true, // Mark as ready immediately since we have the image
-        visualType: FrameType.IMAGE // Force type to Image
+        visualGenerated: true,
+        visualType: 'IMAGE' as const
     });
     setActiveImageSelector(null);
   };
@@ -59,7 +59,7 @@ const Storyboard: React.FC<StoryboardProps> = ({
                     visualSourceType: 'UPLOAD',
                     visualUrl: e.target.result as string,
                     visualGenerated: true,
-                    visualType: FrameType.IMAGE
+                    visualType: 'IMAGE' as const
                 });
             }
         };
@@ -259,22 +259,11 @@ const Storyboard: React.FC<StoryboardProps> = ({
 
                 <div className="relative flex-1 bg-slate-200 flex flex-col items-center justify-center p-4">
                     {frame.visualUrl ? (
-                        frame.visualType === FrameType.VIDEO ? (
-                            <video 
-                                key={frame.visualUrl}
-                                src={frame.visualUrl} 
-                                controls 
-                                playsInline
-                                className="w-full h-full object-contain max-h-[280px]"
-                                poster={PLACEHOLDER_IMAGE}
-                            />
-                        ) : (
-                            <img 
-                                src={frame.visualUrl} 
-                                alt={`Frame ${index + 1}`} 
-                                className="w-full h-full object-contain max-h-[280px] shadow-sm bg-white"
-                            />
-                        )
+                        <img 
+                            src={frame.visualUrl} 
+                            alt={`Frame ${index + 1}`} 
+                            className="w-full h-full object-contain max-h-[280px] shadow-sm bg-white"
+                        />
                     ) : (
                         <div className="flex flex-col items-center justify-center text-center p-4 w-full h-full">
                             {frame.isGenerating ? (
@@ -396,16 +385,10 @@ const Storyboard: React.FC<StoryboardProps> = ({
                            ⏱️ 예상 {frame.estimatedDuration}초
                         </span>
                     </h3>
-                    {frame.visualSourceType === 'AI' && (
-                        <select 
-                            disabled={isGenerating || frame.visualGenerated}
-                            value={frame.visualType}
-                            onChange={(e) => onUpdateFrame(frame.id, { visualType: e.target.value as FrameType })}
-                            className="text-xs border border-slate-300 rounded px-2 py-1 bg-slate-50 text-slate-600"
-                        >
-                            <option value={FrameType.IMAGE}>이미지 장면 생성</option>
-                            <option value={FrameType.VIDEO}>비디오 장면 생성</option>
-                        </select>
+                    {frame.visualSourceType === 'AI' && frame.visualGenerated && (
+                        <span className="text-xs px-2 py-1 bg-indigo-50 text-indigo-600 rounded font-medium">
+                            🖼️ AI 이미지 생성
+                        </span>
                     )}
                 </div>
 

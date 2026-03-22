@@ -1,4 +1,4 @@
-import { StoryboardFrame, FrameType } from "../types";
+import { StoryboardFrame } from "../types";
 
 // Helpers
 const loadImage = (url: string): Promise<HTMLImageElement> => {
@@ -34,7 +34,7 @@ const renderFrameToCanvas = (
   ctx2d: CanvasRenderingContext2D,
   width: number,
   height: number,
-  visual: HTMLImageElement | HTMLVideoElement | null,
+  visual: HTMLImageElement | null,
   caption: string | undefined
 ): void => {
   ctx2d.fillStyle = "black";
@@ -83,7 +83,7 @@ const playFrameWithRaf = (
   ctx2d: CanvasRenderingContext2D,
   width: number,
   height: number,
-  visual: HTMLImageElement | HTMLVideoElement | null,
+  visual: HTMLImageElement | null,
   caption: string | undefined,
   audioDurationMs: number
 ): Promise<void> => {
@@ -167,27 +167,11 @@ export const exportVideo = async (
       const audioBuffer = await loadAudio(frame.audioUrl!, audioCtx);
       const audioDurationMs = audioBuffer.duration * 1000;
 
-      let videoElement: HTMLVideoElement | null = null;
-      let imgElement: HTMLImageElement | null = null;
-
-      if (frame.visualType === FrameType.IMAGE) {
-        imgElement = await loadImage(frame.visualUrl!);
-      } else {
-        videoElement = document.createElement("video");
-        videoElement.src = frame.visualUrl!;
-        videoElement.crossOrigin = "anonymous";
-        videoElement.muted = true;
-        videoElement.loop = true;
-        await new Promise<void>((resolve, reject) => {
-          videoElement!.onloadeddata = () => resolve();
-          videoElement!.onerror = () => reject(new Error(`비디오 로드 실패: 프레임 ${frame.frameNumber}`));
-          // 10초 타임아웃
-          setTimeout(() => reject(new Error(`비디오 로드 타임아웃: 프레임 ${frame.frameNumber}`)), 10000);
-        });
-      }
+      // 이미지 로드 (모든 프레임은 이미지 타입)
+      const imgElement = await loadImage(frame.visualUrl!);
 
       // 첫 프레임 미리 그리기 (검은 화면 방지)
-      renderFrameToCanvas(ctx2d, width, height, imgElement ?? videoElement, frame.caption);
+      renderFrameToCanvas(ctx2d, width, height, imgElement, frame.caption);
 
       // 녹화 재개
       recorder.resume();
@@ -198,18 +182,11 @@ export const exportVideo = async (
       source.connect(dest);
       source.start();
 
-      if (videoElement) await videoElement.play();
-
-      // [핵심 수정] rAF 기반 렌더링 → 메인 스레드 양보, 정밀한 타이밍
-      await playFrameWithRaf(ctx2d, width, height, imgElement ?? videoElement, frame.caption, audioDurationMs);
+      // rAF 기반 렌더링 → 메인 스레드 양보, 정밀한 타이밍
+      await playFrameWithRaf(ctx2d, width, height, imgElement, frame.caption, audioDurationMs);
 
       // 다음 프레임 로드 전 녹화 일시정지
       recorder.pause();
-
-      if (videoElement) {
-        videoElement.pause();
-        videoElement.remove();
-      }
 
       // [수정] 사용 완료된 Blob URL 추적 (즉시 revoke하면 녹화 중 문제 발생 가능)
       if (frame.audioUrl?.startsWith('blob:')) blobUrlsToRevoke.push(frame.audioUrl);

@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { MODEL_PLANNING, MODEL_IMAGE, MODEL_VIDEO, MODEL_TTS, SYSTEM_INSTRUCTION_PLANNER } from "../constants";
-import { PlanResponseItem, StoryboardFrame, FrameType } from "../types";
+import { MODEL_PLANNING, MODEL_IMAGE, MODEL_TTS, SYSTEM_INSTRUCTION_PLANNER } from "../constants";
+import { PlanResponseItem } from "../types";
 import { decode, decodeAudioData, audioBufferToWav } from "./audioUtils";
 
 const getClient = () => {
@@ -24,7 +24,6 @@ export const generateStoryPlan = async (documentText: string, file?: FileData): 
   
   const parts: any[] = [];
 
-  // 1. Add File if present (PDF support)
   if (file) {
     parts.push({
       inlineData: {
@@ -34,9 +33,6 @@ export const generateStoryPlan = async (documentText: string, file?: FileData): 
     });
   }
 
-  // 2. Add Text (Instructions or extracted text)
-  // If a file is attached, this text acts as prompt/instruction.
-  // If no file, this is the main content.
   if (documentText) {
     parts.push({ text: `다음 문서를 바탕으로 교육용 영상 제작을 위한 스토리보드를 작성해줘:\n\n${documentText}` });
   } else if (file) {
@@ -59,10 +55,9 @@ export const generateStoryPlan = async (documentText: string, file?: FileData): 
           type: Type.OBJECT,
           properties: {
             script: { type: Type.STRING, description: "Korean narration script" },
-            visualPrompt: { type: Type.STRING, description: "Detailed visual description in English for image generation" },
-            visualType: { type: Type.STRING, enum: ["IMAGE", "VIDEO"], description: "Whether to generate an image or video" }
+            visualPrompt: { type: Type.STRING, description: "Detailed visual description in English for image generation" }
           },
-          required: ["script", "visualPrompt", "visualType"]
+          required: ["script", "visualPrompt"]
         }
       }
     }
@@ -89,44 +84,12 @@ export const generateFrameImage = async (prompt: string): Promise<string> => {
     }
   });
 
-  // Extract image
   for (const part of response.candidates?.[0]?.content?.parts || []) {
     if (part.inlineData) {
       return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
   }
   throw new Error("No image generated");
-};
-
-export const generateFrameVideo = async (prompt: string): Promise<string> => {
-  const ai = getClient();
-  
-  // Veo generation requires polling
-  let operation = await ai.models.generateVideos({
-    model: MODEL_VIDEO,
-    prompt: prompt,
-    config: {
-      numberOfVideos: 1,
-      resolution: '1080p',
-      aspectRatio: '16:9'
-    }
-  });
-
-  // Polling loop
-  while (!operation.done) {
-    await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5s
-    operation = await ai.operations.getVideosOperation({ operation: operation });
-  }
-
-  const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
-  if (!videoUri) throw new Error("Video generation failed or returned no URI");
-
-  // Fetch the actual video bytes using the API key
-  const videoResponse = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
-  if (!videoResponse.ok) throw new Error("Failed to download generated video");
-  
-  const blob = await videoResponse.blob();
-  return URL.createObjectURL(blob);
 };
 
 export const generateFrameAudio = async (text: string): Promise<string> => {
@@ -148,7 +111,6 @@ export const generateFrameAudio = async (text: string): Promise<string> => {
   const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   if (!base64Audio) throw new Error("No audio generated");
 
-  // Decode and create Blob URL
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
   const audioBuffer = await decodeAudioData(
     decode(base64Audio),

@@ -1,14 +1,9 @@
-export enum FrameType {
-  IMAGE = 'IMAGE',
-  VIDEO = 'VIDEO'
-}
-
 export interface StoryboardFrame {
   id: string;
   frameNumber: number;
   script: string;
   visualPrompt: string;
-  visualType: FrameType;
+  visualType: 'IMAGE';
   
   // New fields for image source selection
   visualSourceType: 'AI' | 'DOC' | 'UPLOAD'; 
@@ -28,8 +23,6 @@ export type GenerationStep = 'INPUT' | 'PLANNING' | 'REVIEW' | 'GENERATING' | 'C
 export interface PlanResponseItem {
   script: string;
   visualPrompt: string;
-  visualType: 'IMAGE' | 'VIDEO';
-  // Optional: suggested page number if AI detects it, though we rely on user selection
   relevantPageNumber?: number; 
 }
 

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import InputSection from './components/InputSection';
 import Storyboard from './components/Storyboard';
-import { StoryboardFrame, GenerationStep, FrameType } from './types';
-import { generateStoryPlan, generateFrameImage, generateFrameVideo, generateFrameAudio, FileData } from './services/gemini';
+import { StoryboardFrame, GenerationStep } from './types';
+import { generateStoryPlan, generateFrameImage, generateFrameAudio, FileData } from './services/gemini';
 import { exportVideo } from './services/videoExporter';
 import { extractImagesFromPdf } from './services/pdfUtils';
 
@@ -92,7 +92,7 @@ export const App: React.FC = () => {
         frameNumber: index + 1,
         script: item.script,
         visualPrompt: item.visualPrompt,
-        visualType: item.visualType === 'VIDEO' ? FrameType.VIDEO : FrameType.IMAGE,
+        visualType: 'IMAGE' as const,
         visualSourceType: 'AI',
         audioGenerated: false,
         visualGenerated: false,
@@ -139,12 +139,7 @@ export const App: React.FC = () => {
               const audioUrl = await generateFrameAudio(frame.script);
               handleUpdateFrame(id, { audioUrl, audioGenerated: true, isGenerating: false });
           } else {
-              let visualUrl = '';
-              if (frame.visualType === FrameType.VIDEO) {
-                  visualUrl = await generateFrameVideo(frame.visualPrompt);
-              } else {
-                  visualUrl = await generateFrameImage(frame.visualPrompt);
-              }
+              const visualUrl = await generateFrameImage(frame.visualPrompt);
               handleUpdateFrame(id, { visualUrl, visualGenerated: true, isGenerating: false });
           }
       } catch (e: any) {
@@ -243,12 +238,7 @@ export const App: React.FC = () => {
           if (latestFrame.visualSourceType === 'AI' && !latestFrame.visualGenerated) {
               await generateWithRetry(
                   async () => {
-                      let visualUrl = '';
-                      if (latestFrame.visualType === FrameType.VIDEO) {
-                          visualUrl = await generateFrameVideo(latestFrame.visualPrompt);
-                      } else {
-                          visualUrl = await generateFrameImage(latestFrame.visualPrompt);
-                      }
+                      const visualUrl = await generateFrameImage(latestFrame.visualPrompt);
                       updateFrameState(id, { visualUrl, visualGenerated: true, error: undefined });
                   },
                   (status) => updateFrameState(id, { error: status })
