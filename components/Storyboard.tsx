@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { StoryboardFrame } from '../types';
 import { PLACEHOLDER_IMAGE } from '../constants';
 
+// 테스트 모드 플래그 (App.tsx와 동일한 환경변수 참조)
+const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
 interface StoryboardProps {
   frames: StoryboardFrame[];
   docImages?: string[]; // Rendered images from PDF pages
@@ -112,6 +115,22 @@ const Storyboard: React.FC<StoryboardProps> = ({
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6">
+
+      {/* 테스트 모드 안내 배너 */}
+      {IS_DEMO_MODE && (
+        <div className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl px-5 py-4">
+          <span className="text-2xl">🧪</span>
+          <div>
+            <p className="font-bold text-orange-800 text-sm">테스트 모드 활성화</p>
+            <p className="text-orange-700 text-xs mt-0.5">
+              현재 AI가 생성한 전체 컷의 <strong>50%({frames.length}컷)</strong>만 표시되고 있습니다.
+              영상 생성도 해당 컷에 대해서만 진행됩니다.
+              풀버전 사용을 원하시면 관리자에게 문의하세요.
+            </p>
+          </div>
+        </div>
+      )}
+
        <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 sticky top-4 z-10 flex flex-col xl:flex-row justify-between items-center gap-4">
         <div className="flex flex-col gap-1">
            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">

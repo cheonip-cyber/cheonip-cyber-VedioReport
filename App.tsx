@@ -13,6 +13,21 @@ const calculateDuration = (text: string): number => {
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * [테스트 모드]
+ * Vercel 환경변수 VITE_DEMO_MODE=true 설정 시 활성화.
+ * 스토리보드 컷을 전체의 50%만 표시하여 테스트 시간을 단축.
+ * 풀버전 복원: Vercel 환경변수에서 VITE_DEMO_MODE 삭제 또는 false로 변경 후 재배포.
+ * 기존 코드는 전혀 수정하지 않으며, 컷 배열을 슬라이싱하는 방식으로만 동작.
+ */
+const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
+const applyDemoSlice = (allFrames: StoryboardFrame[]): StoryboardFrame[] => {
+  if (!IS_DEMO_MODE) return allFrames;
+  const half = Math.max(1, Math.ceil(allFrames.length / 2));
+  return allFrames.slice(0, half);
+};
+
 export const App: React.FC = () => {
   const [step, setStep] = useState<GenerationStep>('INPUT');
   const [frames, setFrames] = useState<StoryboardFrame[]>([]);
@@ -101,7 +116,9 @@ export const App: React.FC = () => {
         caption: item.script
       }));
 
-      setFrames(newFrames);
+      // [테스트 모드] IS_DEMO_MODE=true 시 전체 컷의 50%만 사용
+      // IS_DEMO_MODE=false(기본) 시 applyDemoSlice는 배열을 그대로 반환
+      setFrames(applyDemoSlice(newFrames));
       setStep('REVIEW');
     } catch (error) {
       console.error(error);
@@ -324,6 +341,12 @@ export const App: React.FC = () => {
             >
                 ⚠️ API 키 선택 필요
             </button>
+          )}
+          {/* 테스트 모드 배너: IS_DEMO_MODE=true 일 때만 표시 */}
+          {IS_DEMO_MODE && (
+            <span className="text-xs font-bold px-3 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-300 animate-pulse">
+              🧪 테스트 모드 — 전체 컷의 50% 표시 중
+            </span>
           )}
         </div>
       </header>
