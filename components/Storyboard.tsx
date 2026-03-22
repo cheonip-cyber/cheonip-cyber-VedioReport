@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { StoryboardFrame } from '../types';
 import { PLACEHOLDER_IMAGE } from '../constants';
 
-// 테스트 모드 플래그 (App.tsx와 동일한 환경변수 참조)
-const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+// 테스트 모드 플래그 (App.tsx와 동일하게 유지)
+const IS_DEMO_MODE = true;
 
 interface StoryboardProps {
   frames: StoryboardFrame[];

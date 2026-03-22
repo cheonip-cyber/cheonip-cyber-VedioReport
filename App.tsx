@@ -14,13 +14,11 @@ const calculateDuration = (text: string): number => {
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * [테스트 모드]
- * Vercel 환경변수 VITE_DEMO_MODE=true 설정 시 활성화.
- * 스토리보드 컷을 전체의 50%만 표시하여 테스트 시간을 단축.
- * 풀버전 복원: Vercel 환경변수에서 VITE_DEMO_MODE 삭제 또는 false로 변경 후 재배포.
- * 기존 코드는 전혀 수정하지 않으며, 컷 배열을 슬라이싱하는 방식으로만 동작.
+ * [테스트 모드 플래그]
+ * ✅ 테스트 중:  IS_DEMO_MODE = true  → 전체 컷의 50%만 표시
+ * 🚀 풀버전 복원: IS_DEMO_MODE = false → 전체 컷 표시 (이 한 줄만 변경 후 push)
  */
-const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+const IS_DEMO_MODE = true;
 
 const applyDemoSlice = (allFrames: StoryboardFrame[]): StoryboardFrame[] => {
   if (!IS_DEMO_MODE) return allFrames;
