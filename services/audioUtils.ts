@@ -27,58 +27,53 @@ export async function decodeAudioData(
   return buffer;
 }
 
+/**
+ * [버그 수정] 기존 코드는 pos 변수를 WAV 헤더 쓰기 offset과 샘플 인덱스로 혼용하여
+ * WAV 데이터 영역 쓰기가 잘못된 위치에서 시작되는 버그가 있었음.
+ * 수정: 헤더 쓰기(pos)와 샘플 데이터 쓰기(sampleIndex / byteOffset)를 완전히 분리.
+ */
 export async function audioBufferToWav(buffer: AudioBuffer): Promise<Blob> {
   const numOfChan = buffer.numberOfChannels;
-  const length = buffer.length * numOfChan * 2 + 44;
-  const bufferArray = new ArrayBuffer(length);
-  const view = new DataView(bufferArray);
-  const channels = [];
-  let i;
-  let sample;
-  let offset = 0;
+  const numSamples = buffer.length; // 채널당 샘플 수
+  const dataByteLength = numSamples * numOfChan * 2; // 16-bit = 2 bytes/sample
+  const totalLength = 44 + dataByteLength;
+  const arrayBuffer = new ArrayBuffer(totalLength);
+  const view = new DataView(arrayBuffer);
+
+  // --- WAV 헤더 쓰기 (pos: 헤더 전용 포인터) ---
   let pos = 0;
+  const setUint16 = (data: number) => { view.setUint16(pos, data, true); pos += 2; };
+  const setUint32 = (data: number) => { view.setUint32(pos, data, true); pos += 4; };
 
-  const setUint16 = (data: number) => {
-    view.setUint16(pos, data, true);
-    pos += 2;
-  };
-
-  const setUint32 = (data: number) => {
-    view.setUint32(pos, data, true);
-    pos += 4;
-  };
-
-  // write WAVE header
   setUint32(0x46464952); // "RIFF"
-  setUint32(length - 8); // file length - 8
+  setUint32(totalLength - 8);
   setUint32(0x45564157); // "WAVE"
-
-  setUint32(0x20746d66); // "fmt " chunk
-  setUint32(16); // length = 16
-  setUint16(1); // PCM (uncompressed)
+  setUint32(0x20746d66); // "fmt "
+  setUint32(16);
+  setUint16(1); // PCM
   setUint16(numOfChan);
   setUint32(buffer.sampleRate);
-  setUint32(buffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
-  setUint16(numOfChan * 2); // block-align
-  setUint16(16); // 16-bit (hardcoded in this example)
+  setUint32(buffer.sampleRate * numOfChan * 2);
+  setUint16(numOfChan * 2);
+  setUint16(16);
+  setUint32(0x61746164); // "data"
+  setUint32(dataByteLength);
 
-  setUint32(0x61746164); // "data" - chunk
-  setUint32(length - pos - 4); // chunk length
-
-  // write interleaved data
-  for (i = 0; i < buffer.numberOfChannels; i++)
+  // --- PCM 샘플 데이터 쓰기 (byteOffset: 데이터 전용, 항상 44부터 시작) ---
+  const channels: Float32Array[] = [];
+  for (let i = 0; i < numOfChan; i++) {
     channels.push(buffer.getChannelData(i));
-
-  while (pos < buffer.length) {
-    for (i = 0; i < numOfChan; i++) {
-      // interleave channels
-      sample = Math.max(-1, Math.min(1, channels[i][pos])); // clamp
-      sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // scale to 16-bit signed int
-      view.setInt16(44 + offset, sample, true); // write 16-bit sample
-      offset += 2;
-    }
-    pos++;
   }
 
-  return new Blob([bufferArray], { type: 'audio/wav' });
+  let byteOffset = 44;
+  for (let sampleIndex = 0; sampleIndex < numSamples; sampleIndex++) {
+    for (let ch = 0; ch < numOfChan; ch++) {
+      const s = Math.max(-1, Math.min(1, channels[ch][sampleIndex]));
+      const pcm = (s < 0 ? s * 32768 : s * 32767) | 0;
+      view.setInt16(byteOffset, pcm, true);
+      byteOffset += 2;
+    }
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
 }

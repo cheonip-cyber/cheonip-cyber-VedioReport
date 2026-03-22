@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import InputSection from './components/InputSection';
 import Storyboard from './components/Storyboard';
 import { StoryboardFrame, GenerationStep, FrameType } from './types';
@@ -16,16 +16,16 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export const App: React.FC = () => {
   const [step, setStep] = useState<GenerationStep>('INPUT');
   const [frames, setFrames] = useState<StoryboardFrame[]>([]);
-  const [docImages, setDocImages] = useState<string[]>([]); // Stores extracted images from PDF
+  const [docImages, setDocImages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isExportComplete, setIsExportComplete] = useState(false);
+  // [수정] 영상 내보내기 진행률 표시
+  const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(null);
 
   useEffect(() => {
-    // Check for Paid API Key selection (Required for Veo)
     const checkKey = async () => {
-      // Wait a bit for aistudio to be injected if it's not there yet
       if (!window.aistudio) {
         for (let i = 0; i < 10; i++) {
           await wait(100);
@@ -37,8 +37,6 @@ export const App: React.FC = () => {
         const hasKey = await window.aistudio.hasSelectedApiKey();
         setHasApiKey(hasKey);
       } else {
-        // Fallback for non-AI Studio environments (like Vercel or Localhost)
-        // If process.env.GEMINI_API_KEY is injected by the build tool, we consider it has a key
         const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
         if (envKey && envKey !== '') {
           setHasApiKey(true);
@@ -52,18 +50,14 @@ export const App: React.FC = () => {
   }, []);
 
   const handleSelectKey = async () => {
-    console.log("Attempting to open API key selection dialog...");
     if (window.aistudio?.openSelectKey) {
       try {
         await window.aistudio.openSelectKey();
-        console.log("API key selection dialog opened/closed");
         setHasApiKey(true);
       } catch (err) {
         console.error("Error opening API key selection dialog:", err);
       }
     } else {
-      console.warn("window.aistudio.openSelectKey is not available");
-      // If we are on Vercel/Production and have an env key, we don't need to alert
       const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
       if (!envKey || envKey === '') {
         if (window.location.hostname !== 'localhost') {
@@ -74,18 +68,14 @@ export const App: React.FC = () => {
   };
 
   const handlePlanGenerate = async (text: string, fileData?: FileData, originalFile?: File) => {
-    // Check for API Key selection first (Required for paid models in shared environment)
     if (!hasApiKey && window.aistudio) {
         await handleSelectKey();
-        // After selection, we proceed. Even if hasApiKey is still false due to race condition, 
-        // the platform will have injected the key into process.env.API_KEY.
     }
 
     setIsLoading(true);
-    setDocImages([]); // Reset previous images
+    setDocImages([]);
 
     try {
-      // 1. If PDF, extract images in background
       if (originalFile && originalFile.type === 'application/pdf') {
         try {
             const images = await extractImagesFromPdf(originalFile);
@@ -95,7 +85,6 @@ export const App: React.FC = () => {
         }
       }
 
-      // 2. Generate Plan
       const planItems = await generateStoryPlan(text, fileData);
       
       const newFrames: StoryboardFrame[] = planItems.map((item, index) => ({
@@ -104,12 +93,12 @@ export const App: React.FC = () => {
         script: item.script,
         visualPrompt: item.visualPrompt,
         visualType: item.visualType === 'VIDEO' ? FrameType.VIDEO : FrameType.IMAGE,
-        visualSourceType: 'AI', // Default to AI
+        visualSourceType: 'AI',
         audioGenerated: false,
         visualGenerated: false,
         isGenerating: false,
         estimatedDuration: calculateDuration(item.script),
-        caption: item.script // Initialize caption with script
+        caption: item.script
       }));
 
       setFrames(newFrames);
@@ -126,11 +115,9 @@ export const App: React.FC = () => {
     setFrames(prev => prev.map(f => {
         if (f.id === id) {
             const updatedFrame = { ...f, ...updates };
-            // If script changed, recalculate estimated duration
             if (updates.script !== undefined) {
                 updatedFrame.estimatedDuration = calculateDuration(updates.script);
             }
-            // If visual type changed, clear the generated visual so user knows to regenerate
             if (updates.visualType !== undefined && updates.visualType !== f.visualType) {
                 updatedFrame.visualUrl = undefined;
                 updatedFrame.visualGenerated = false;
@@ -145,7 +132,6 @@ export const App: React.FC = () => {
       const frame = frames.find(f => f.id === id);
       if (!frame) return;
 
-      // Set generating state for this frame
       handleUpdateFrame(id, { isGenerating: true, error: undefined });
 
       try {
@@ -175,34 +161,42 @@ export const App: React.FC = () => {
       try {
         return await task();
       } catch (error: any) {
-        // Check for Rate Limit (429) or Quota Exceeded
         const errMsg = error.message || JSON.stringify(error);
         if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED')) {
-          
-          // Try to extract delay from message "Please retry in 45.255s"
-          let delayMs = 30000; // Default 30s
+          let delayMs = 30000;
           const match = errMsg.match(/retry in (\d+(\.\d+)?)s/);
           if (match && match[1]) {
-             delayMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000; // Add 1s buffer
+             delayMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
           } else if (errMsg.includes('45s')) {
              delayMs = 46000;
           }
-
-          // Safety clamp
           if (delayMs < 5000) delayMs = 10000;
 
           const seconds = Math.ceil(delayMs / 1000);
           onStatusUpdate(`⚠️ API 사용량 한도 초과. ${seconds}초 후 자동으로 재시도합니다...`);
-          
           await wait(delayMs);
           onStatusUpdate(`재시도 중...`);
         } else {
-          // If not a rate limit error, rethrow
           throw error;
         }
       }
     }
   };
+
+  /**
+   * [핵심 수정] stale closure 문제 해결.
+   *
+   * 기존 문제:
+   *  - handleGenerateMedia 시작 시점의 frames 스냅샷으로 for...of를 순회함.
+   *  - React의 setState는 비동기이므로, updateFrameState 호출 결과가 다음 루프 반복에
+   *    반영되지 않아 이미 완료된 프레임을 다시 생성하거나, 완료 감지가 틀어짐.
+   *  - frames를 최신 상태로 읽으려면 setFrames의 함수형 업데이트 + ref를 활용해야 함.
+   *
+   * 해결: framesRef를 통해 항상 최신 frames를 참조하고,
+   *       완료 여부를 ref 기반으로 판단.
+   */
+  const framesRef = useRef<StoryboardFrame[]>(frames);
+  useEffect(() => { framesRef.current = frames; }, [frames]);
 
   const handleGenerateMedia = async () => {
     if (!hasApiKey && window.aistudio) {
@@ -210,81 +204,89 @@ export const App: React.FC = () => {
     }
 
     setStep('GENERATING');
-    
-    // Helper to update state inside async operations
+
+    // frames의 id 목록을 확정 (시작 시점 기준)
+    const frameIds = framesRef.current.map(f => f.id);
+
     const updateFrameState = (id: string, updates: Partial<StoryboardFrame>) => {
         setFrames(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
     };
 
-    // Process frames sequentially to avoid hitting rate limits instantly
-    for (const frame of frames) {
-        // Skip if done
-        const isAudioReady = frame.audioGenerated;
-        const isVisualReady = frame.visualGenerated && 
-            (frame.visualSourceType === 'AI' ? !!frame.visualUrl : true);
-            
-        if (isAudioReady && isVisualReady) continue;
+    for (const id of frameIds) {
+      // [수정] 매 반복마다 framesRef에서 최신 상태를 읽음
+      const frame = framesRef.current.find(f => f.id === id);
+      if (!frame) continue;
 
-        updateFrameState(frame.id, { isGenerating: true, error: undefined });
+      const isAudioReady = frame.audioGenerated;
+      const isVisualReady = frame.visualGenerated &&
+          (frame.visualSourceType === 'AI' ? !!frame.visualUrl : true);
 
-        try {
-            // 1. Generate Audio (with retry)
-            if (!frame.audioGenerated) {
-                await generateWithRetry(
-                    async () => {
-                        const audioUrl = await generateFrameAudio(frame.script);
-                        updateFrameState(frame.id, { audioUrl, audioGenerated: true, error: undefined });
-                    },
-                    (status) => updateFrameState(frame.id, { error: status }) // Show waiting status in error field temporarily
-                );
-            }
+      if (isAudioReady && isVisualReady) continue;
 
-            // 2. Generate Visual (with retry)
-            if (frame.visualSourceType === 'AI' && !frame.visualGenerated) {
-                await generateWithRetry(
-                    async () => {
-                        let visualUrl = '';
-                        if (frame.visualType === FrameType.VIDEO) {
-                            visualUrl = await generateFrameVideo(frame.visualPrompt);
-                        } else {
-                            visualUrl = await generateFrameImage(frame.visualPrompt);
-                        }
-                        updateFrameState(frame.id, { visualUrl, visualGenerated: true, error: undefined });
-                    },
-                    (status) => updateFrameState(frame.id, { error: status })
-                );
-            } else if ((frame.visualSourceType === 'DOC' || frame.visualSourceType === 'UPLOAD') && frame.visualUrl) {
-                // Manually selected, just mark done
-                updateFrameState(frame.id, { visualGenerated: true });
-            }
+      updateFrameState(id, { isGenerating: true, error: undefined });
 
-        } catch (e: any) {
-            console.error(`Error generating frame ${frame.frameNumber}:`, e);
-            updateFrameState(frame.id, { error: e.message || 'Generation failed' });
-        } finally {
-            updateFrameState(frame.id, { isGenerating: false });
-        }
-        
-        // Small delay between frames to be nice to the API
-        if (!frame.audioGenerated || !frame.visualGenerated) {
-           await wait(1000);
-        }
+      try {
+          if (!frame.audioGenerated) {
+              await generateWithRetry(
+                  async () => {
+                      const audioUrl = await generateFrameAudio(frame.script);
+                      updateFrameState(id, { audioUrl, audioGenerated: true, error: undefined });
+                  },
+                  (status) => updateFrameState(id, { error: status })
+              );
+          }
+
+          // [수정] 최신 frame 다시 조회 (오디오 생성 후 상태가 바뀌었을 수 있음)
+          const latestFrame = framesRef.current.find(f => f.id === id);
+          if (!latestFrame) continue;
+
+          if (latestFrame.visualSourceType === 'AI' && !latestFrame.visualGenerated) {
+              await generateWithRetry(
+                  async () => {
+                      let visualUrl = '';
+                      if (latestFrame.visualType === FrameType.VIDEO) {
+                          visualUrl = await generateFrameVideo(latestFrame.visualPrompt);
+                      } else {
+                          visualUrl = await generateFrameImage(latestFrame.visualPrompt);
+                      }
+                      updateFrameState(id, { visualUrl, visualGenerated: true, error: undefined });
+                  },
+                  (status) => updateFrameState(id, { error: status })
+              );
+          } else if (
+              (latestFrame.visualSourceType === 'DOC' || latestFrame.visualSourceType === 'UPLOAD') &&
+              latestFrame.visualUrl
+          ) {
+              updateFrameState(id, { visualGenerated: true });
+          }
+
+      } catch (e: any) {
+          console.error(`Error generating frame ${frame.frameNumber}:`, e);
+          updateFrameState(id, { error: e.message || 'Generation failed' });
+      } finally {
+          updateFrameState(id, { isGenerating: false });
+      }
+
+      await wait(1000);
     }
-    
-    // Check if truly completed or partial fail
+
     setStep('COMPLETED');
   };
 
   const handleExportVideo = async () => {
     setIsExporting(true);
+    setExportProgress({ current: 0, total: frames.length });
     try {
-        await exportVideo(frames);
+        await exportVideo(frames, (current, total) => {
+            setExportProgress({ current, total });
+        });
         setIsExportComplete(true);
-    } catch (e) {
+    } catch (e: any) {
         console.error("Export failed", e);
-        alert("영상 통합 중 오류가 발생했습니다.");
+        alert(`영상 통합 중 오류가 발생했습니다.\n\n${e.message || e}`);
     } finally {
         setIsExporting(false);
+        setExportProgress(null);
     }
   };
 
@@ -295,6 +297,7 @@ export const App: React.FC = () => {
     setIsLoading(false);
     setIsExporting(false);
     setIsExportComplete(false);
+    setExportProgress(null);
   };
 
   return (
@@ -324,6 +327,26 @@ export const App: React.FC = () => {
         </div>
       </header>
 
+      {/* 영상 내보내기 진행률 오버레이 */}
+      {isExporting && exportProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
+            <div className="text-4xl mb-4">🎬</div>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">영상 통합 중...</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              컷 {exportProgress.current} / {exportProgress.total} 처리 중
+            </p>
+            <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500 transition-all duration-300 rounded-full"
+                style={{ width: `${exportProgress.total > 0 ? Math.round((exportProgress.current / exportProgress.total) * 100) : 0}%` }}
+              />
+            </div>
+            <p className="text-xs text-slate-400 mt-3">브라우저 탭을 닫거나 이동하지 마세요.</p>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
@@ -342,6 +365,7 @@ export const App: React.FC = () => {
                 isExporting={isExporting}
                 isExportComplete={isExportComplete}
                 onReset={handleReset}
+                onRegenerateFrame={handleRegenerateFrame}
             />
         )}
 
