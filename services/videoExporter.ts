@@ -203,25 +203,25 @@ export const exportVideo = async (
       // 첫 프레임 미리 그리기 (검은 화면 방지)
       renderFrameToCanvas(ctx2d, width, height, imgElement, frame.caption);
 
-      // 녹화 재개
+      // 녹화 재개 (화면은 즉시 전환)
       recorder.resume();
 
-      // [기능 3] 컷 전환 묵음 간격: 첫 번째 컷 제외, 나머지 컷 시작 전 600ms 묵음
-      // - 오디오 없이 이미지만 표시되는 구간을 두어 컷 전환을 자연스럽게 처리
-      // - AudioContext.currentTime 기반으로 정밀하게 딜레이 후 재생 시작
-      const silenceMs = i > 0 ? 600 : 0;
-      if (silenceMs > 0) {
-        await new Promise<void>(resolve => setTimeout(resolve, silenceMs));
-      }
+      // [기능 3] 컷 전환 묵음 간격
+      // - setTimeout 방식 제거: 컷마다 오차가 누적되어 3번째 컷부터 오디오/화면 1~2초 어긋나는 문제
+      // - AudioContext.currentTime 기반 예약 재생으로 교체:
+      //   샘플 단위 정밀 타이머이므로 누적 오차 없이 매 컷 동일한 간격 보장
+      // - 화면(rAF)은 recorder.resume()과 동시에 시작, 오디오만 silenceSec 후 재생
+      const silenceSec = i > 0 ? 0.4 : 0;
 
-      // 오디오 재생
+      // 오디오 재생 (silenceSec 후 시작 예약)
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(dest);
-      source.start();
+      source.start(audioCtx.currentTime + silenceSec);
 
-      // rAF 기반 렌더링 — 묵음 간격 + 오디오 재생 시간 전체를 커버
-      await playFrameWithRaf(ctx2d, width, height, imgElement, frame.caption, silenceMs + audioDurationMs);
+      // rAF 렌더링: 묵음 구간(silenceSec) + 오디오 재생 시간 전체를 커버
+      // 화면은 즉시 시작되고 오디오만 지연되므로 화면-오디오 동기화 유지
+      await playFrameWithRaf(ctx2d, width, height, imgElement, frame.caption, (silenceSec * 1000) + audioDurationMs);
 
       // 다음 프레임 로드 전 녹화 일시정지
       recorder.pause();
