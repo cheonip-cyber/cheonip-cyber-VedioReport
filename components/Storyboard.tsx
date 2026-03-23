@@ -16,7 +16,8 @@ interface StoryboardProps {
   isExportComplete?: boolean;
   onReset?: () => void;
   onRegenerateFrame?: (id: string, type: 'AUDIO' | 'VISUAL') => void;
-  onCancelGeneration?: () => void; // [기능 4] 생성 취소
+  onCancelGeneration?: () => void;
+  onReExportVideo?: () => void; // 영상 재생성
 }
 
 const Storyboard: React.FC<StoryboardProps> = ({ 
@@ -31,6 +32,7 @@ const Storyboard: React.FC<StoryboardProps> = ({
     onReset,
     onRegenerateFrame,
     onCancelGeneration,
+    onReExportVideo,
 }) => {
   const [activeImageSelector, setActiveImageSelector] = useState<string | null>(null);
   const [dragOverFrameId, setDragOverFrameId] = useState<string | null>(null);
@@ -237,6 +239,19 @@ const Storyboard: React.FC<StoryboardProps> = ({
                                     최종 영상 다운로드
                                 </>
                             )}
+                        </button>
+                     )}
+
+                     {/* 다운로드 완료 후 재생성 버튼 */}
+                     {isExportComplete && onReExportVideo && (
+                        <button
+                            onClick={onReExportVideo}
+                            className="px-5 py-3 rounded-lg font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 hover:shadow transition-all whitespace-nowrap flex items-center gap-2"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            영상 재생성
                         </button>
                      )}
                 </div>

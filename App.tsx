@@ -322,6 +322,11 @@ export const App: React.FC = () => {
     setExportProgress(null);
   };
 
+  // 영상 재생성: isExportComplete만 초기화하고 스토리보드는 그대로 유지
+  const handleReExportVideo = () => {
+    setIsExportComplete(false);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       {/* Header */}
@@ -395,6 +400,7 @@ export const App: React.FC = () => {
                 onReset={handleReset}
                 onRegenerateFrame={handleRegenerateFrame}
                 onCancelGeneration={handleCancelGeneration}
+                onReExportVideo={handleReExportVideo}
             />
         )}
 
