@@ -28,6 +28,45 @@ export async function decodeAudioData(
 }
 
 /**
+ * [원인 3 수정] 피크 정규화 (Peak Normalization)
+ * TTS API는 컷마다 다른 볼륨으로 오디오를 생성하는 변동성이 있음.
+ * 이 함수는 각 컷의 오디오에서 가장 큰 샘플값(피크)을 찾아
+ * 모든 샘플을 targetPeak 기준으로 스케일링하여 볼륨을 통일함.
+ *
+ * 예: 피크가 0.5인 조용한 컷 → 모든 샘플을 1.9배 증폭 → 피크 0.95
+ *     피크가 0.9인 큰 컷    → 모든 샘플을 1.05배 증폭 → 피크 0.95
+ *
+ * @param buffer 정규화할 AudioBuffer
+ * @param targetPeak 목표 피크값 (0.0~1.0, 기본 0.95 — 클리핑 방지를 위해 1.0 미만 권장)
+ */
+export function normalizeAudioBuffer(buffer: AudioBuffer, targetPeak: number = 0.95): AudioBuffer {
+  let maxPeak = 0;
+
+  // 1단계: 전체 샘플에서 최대 절댓값(피크) 탐색
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const channelData = buffer.getChannelData(ch);
+    for (let i = 0; i < channelData.length; i++) {
+      const abs = Math.abs(channelData[i]);
+      if (abs > maxPeak) maxPeak = abs;
+    }
+  }
+
+  // 피크가 너무 작으면(무음에 가까운 경우) 정규화 생략 — 0으로 나누기 방지
+  if (maxPeak < 0.0001) return buffer;
+
+  // 2단계: 목표 피크에 맞게 모든 샘플 스케일링
+  const gain = targetPeak / maxPeak;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const channelData = buffer.getChannelData(ch);
+    for (let i = 0; i < channelData.length; i++) {
+      channelData[i] = Math.max(-1, Math.min(1, channelData[i] * gain));
+    }
+  }
+
+  return buffer;
+}
+
+/**
  * [버그 수정] 기존 코드는 pos 변수를 WAV 헤더 쓰기 offset과 샘플 인덱스로 혼용하여
  * WAV 데이터 영역 쓰기가 잘못된 위치에서 시작되는 버그가 있었음.
  * 수정: 헤더 쓰기(pos)와 샘플 데이터 쓰기(sampleIndex / byteOffset)를 완전히 분리.

@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { MODEL_PLANNING, MODEL_IMAGE, MODEL_TTS, SYSTEM_INSTRUCTION_PLANNER } from "../constants";
 import { PlanResponseItem } from "../types";
-import { decode, decodeAudioData, audioBufferToWav } from "./audioUtils";
+import { decode, decodeAudioData, audioBufferToWav, normalizeAudioBuffer } from "./audioUtils";
 
 const getClient = () => {
   const key = process.env.API_KEY || process.env.GEMINI_API_KEY;
@@ -13,6 +13,20 @@ const getClient = () => {
 
 // Explicitly set a stable voice to prevent inconsistency
 const VOICE_NAME = 'Zephyr';
+
+/**
+ * [원인 1 수정] AudioContext 싱글턴
+ * 기존: generateFrameAudio 호출마다 new AudioContext() 생성
+ * → OS 오디오 드라이버와 매번 새 세션을 맺어 컷마다 볼륨/음색이 달라짐
+ * 수정: 모듈 레벨에서 하나만 생성하여 모든 컷이 동일한 오디오 컨텍스트 재사용
+ */
+let sharedAudioContext: AudioContext | null = null;
+const getAudioContext = (): AudioContext => {
+  if (!sharedAudioContext || sharedAudioContext.state === 'closed') {
+    sharedAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+  }
+  return sharedAudioContext;
+};
 
 export interface FileData {
   mimeType: string;
@@ -111,13 +125,18 @@ export const generateFrameAudio = async (text: string): Promise<string> => {
   const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   if (!base64Audio) throw new Error("No audio generated");
 
-  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-  const audioBuffer = await decodeAudioData(
+  // [원인 1 수정] 매번 new AudioContext() 대신 싱글턴 재사용
+  const audioContext = getAudioContext();
+  let audioBuffer = await decodeAudioData(
     decode(base64Audio),
     audioContext,
     24000,
     1
   );
+
+  // [원인 3 수정] 피크 정규화: 모든 컷의 최대 볼륨을 동일 기준(0.95)으로 맞춤
+  // TTS API가 컷마다 다른 볼륨으로 생성하는 문제를 보정
+  audioBuffer = normalizeAudioBuffer(audioBuffer, 0.95);
   
   const wavBlob = await audioBufferToWav(audioBuffer);
   return URL.createObjectURL(wavBlob);

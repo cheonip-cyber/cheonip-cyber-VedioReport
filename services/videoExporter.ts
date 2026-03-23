@@ -1,4 +1,5 @@
 import { StoryboardFrame } from "../types";
+import { normalizeAudioBuffer } from "./audioUtils";
 
 // Helpers
 const loadImage = (url: string): Promise<HTMLImageElement> => {
@@ -14,7 +15,9 @@ const loadImage = (url: string): Promise<HTMLImageElement> => {
 const loadAudio = async (url: string, ctx: AudioContext): Promise<AudioBuffer> => {
   const response = await fetch(url);
   const arrayBuffer = await response.arrayBuffer();
-  return await ctx.decodeAudioData(arrayBuffer);
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+  // 영상 통합 단계에서도 피크 정규화 적용 → 최종 영상의 컷 간 볼륨 균일 보장
+  return normalizeAudioBuffer(audioBuffer, 0.95);
 };
 
 /**
