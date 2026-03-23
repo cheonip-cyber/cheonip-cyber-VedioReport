@@ -54,8 +54,8 @@ export const generateStoryPlan = async (documentText: string, file?: FileData): 
         items: {
           type: Type.OBJECT,
           properties: {
-            script: { type: Type.STRING, description: "Korean narration script" },
-            visualPrompt: { type: Type.STRING, description: "Detailed visual description in English for image generation" }
+            script: { type: Type.STRING, description: "한국어 내레이션 대본" },
+            visualPrompt: { type: Type.STRING, description: "이미지 생성을 위한 한국어 시각 묘사 프롬프트. 피사체, 구도, 색감, 조명, 분위기를 상세하게 기술." }
           },
           required: ["script", "visualPrompt"]
         }
