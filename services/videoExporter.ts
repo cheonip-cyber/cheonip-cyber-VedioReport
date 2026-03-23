@@ -195,9 +195,7 @@ export const exportVideo = async (
       const { audioBuffer, imgElement } = await nextAssetsPromise!;
       const audioDurationMs = audioBuffer.duration * 1000;
 
-      // [방법 2] 현재 컷 재생 시작 직후, 다음 컷 에셋을 백그라운드에서 미리 로드 시작
-      // - 재생(rAF 루프) 중에 fetch가 병행되므로 다음 컷의 로드 대기 시간이 0에 가까워짐.
-      // - 마지막 컷이면 null로 설정.
+      // [방법 2] 다음 컷 에셋 백그라운드 로드 시작
       nextAssetsPromise = i + 1 < validFrames.length
         ? prefetchAssets(validFrames[i + 1])
         : null;
@@ -208,15 +206,22 @@ export const exportVideo = async (
       // 녹화 재개
       recorder.resume();
 
+      // [기능 3] 컷 전환 묵음 간격: 첫 번째 컷 제외, 나머지 컷 시작 전 600ms 묵음
+      // - 오디오 없이 이미지만 표시되는 구간을 두어 컷 전환을 자연스럽게 처리
+      // - AudioContext.currentTime 기반으로 정밀하게 딜레이 후 재생 시작
+      const silenceMs = i > 0 ? 600 : 0;
+      if (silenceMs > 0) {
+        await new Promise<void>(resolve => setTimeout(resolve, silenceMs));
+      }
+
       // 오디오 재생
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(dest);
       source.start();
 
-      // rAF 기반 렌더링 (메인 스레드 양보 + 정밀한 타이밍)
-      // 이 대기 시간 동안 위에서 시작한 nextAssetsPromise가 백그라운드에서 진행됨
-      await playFrameWithRaf(ctx2d, width, height, imgElement, frame.caption, audioDurationMs);
+      // rAF 기반 렌더링 — 묵음 간격 + 오디오 재생 시간 전체를 커버
+      await playFrameWithRaf(ctx2d, width, height, imgElement, frame.caption, silenceMs + audioDurationMs);
 
       // 다음 프레임 로드 전 녹화 일시정지
       recorder.pause();

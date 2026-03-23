@@ -7,7 +7,7 @@ const IS_DEMO_MODE = false;
 
 interface StoryboardProps {
   frames: StoryboardFrame[];
-  docImages?: string[]; // Rendered images from PDF pages
+  docImages?: string[];
   onGenerateMedia: () => void;
   isGenerating: boolean;
   onUpdateFrame: (id: string, updates: Partial<StoryboardFrame>) => void;
@@ -16,6 +16,7 @@ interface StoryboardProps {
   isExportComplete?: boolean;
   onReset?: () => void;
   onRegenerateFrame?: (id: string, type: 'AUDIO' | 'VISUAL') => void;
+  onCancelGeneration?: () => void; // [기능 4] 생성 취소
 }
 
 const Storyboard: React.FC<StoryboardProps> = ({ 
@@ -28,7 +29,8 @@ const Storyboard: React.FC<StoryboardProps> = ({
     isExporting,
     isExportComplete,
     onReset,
-    onRegenerateFrame
+    onRegenerateFrame,
+    onCancelGeneration,
 }) => {
   const [activeImageSelector, setActiveImageSelector] = useState<string | null>(null);
   const [dragOverFrameId, setDragOverFrameId] = useState<string | null>(null);
@@ -150,12 +152,39 @@ const Storyboard: React.FC<StoryboardProps> = ({
         </div>
         
         <div className="flex flex-wrap items-center gap-3 justify-end">
+            {/* [기능 1] 항상 표시되는 처음으로 돌아가기 버튼 */}
+            {onReset && !isGenerating && (
+                <button
+                    onClick={onReset}
+                    className="px-4 py-2.5 rounded-lg font-medium text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-700 transition-all text-sm flex items-center gap-1.5 whitespace-nowrap"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    처음으로
+                </button>
+            )}
+
             {isGenerating && (
-                <div className="flex flex-col items-end mr-2">
-                    <span className="text-xs font-bold text-indigo-600">생성 진행률 {progress}%</span>
-                    <div className="w-32 h-2 bg-slate-200 rounded-full overflow-hidden mt-1">
-                        <div className="h-full bg-indigo-500 transition-all duration-300" style={{width: `${progress}%`}}></div>
+                <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-end">
+                        <span className="text-xs font-bold text-indigo-600">생성 진행률 {progress}%</span>
+                        <div className="w-32 h-2 bg-slate-200 rounded-full overflow-hidden mt-1">
+                            <div className="h-full bg-indigo-500 transition-all duration-300" style={{width: `${progress}%`}}></div>
+                        </div>
                     </div>
+                    {/* [기능 4] 생성 취소 버튼 */}
+                    {onCancelGeneration && (
+                        <button
+                            onClick={onCancelGeneration}
+                            className="px-4 py-2.5 rounded-lg font-bold text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 transition-all text-sm flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            생성 취소
+                        </button>
+                    )}
                 </div>
             )}
             
@@ -173,16 +202,6 @@ const Storyboard: React.FC<StoryboardProps> = ({
             {/* Export & Restart Buttons */}
             {isAllComplete && (
                 <div className="flex items-center gap-3 animate-fadeIn">
-                     {/* Restart Button */}
-                     {onReset && (
-                        <button 
-                            onClick={onReset}
-                            className="px-5 py-3 rounded-lg font-bold text-slate-600 bg-white border border-slate-200 shadow-sm hover:bg-slate-50 hover:text-slate-800 hover:shadow transition-all whitespace-nowrap"
-                        >
-                            처음으로
-                        </button>
-                     )}
-
                      {/* Export Button */}
                      {onExportVideo && (
                         <button
@@ -241,7 +260,15 @@ const Storyboard: React.FC<StoryboardProps> = ({
                                 name={`source-${frame.id}`}
                                 className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 border-slate-300"
                                 checked={frame.visualSourceType === 'AI'}
-                                onChange={() => onUpdateFrame(frame.id, { visualSourceType: 'AI' })}
+                                onChange={() => onUpdateFrame(frame.id, {
+                                    visualSourceType: 'AI',
+                                    // [기능 2] DOC/UPLOAD 이미지가 설정된 상태에서 AI로 전환 시
+                                    // 해당 이미지를 초기화하여 스토리보드에 보이지 않도록 처리
+                                    ...(frame.visualSourceType !== 'AI' && {
+                                        visualUrl: undefined,
+                                        visualGenerated: false,
+                                    }),
+                                })}
                                 disabled={isGenerating}
                             />
                             <span className={`text-xs font-medium ${frame.visualSourceType === 'AI' ? 'text-indigo-700' : 'text-slate-500'}`}>AI 자동생성</span>

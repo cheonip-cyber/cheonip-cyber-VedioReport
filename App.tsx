@@ -208,11 +208,19 @@ export const App: React.FC = () => {
   const framesRef = useRef<StoryboardFrame[]>(frames);
   useEffect(() => { framesRef.current = frames; }, [frames]);
 
+  // [기능 4] 생성 취소 플래그 - true가 되면 다음 컷 진입 시 루프를 탈출
+  const cancelGenerationRef = useRef(false);
+
+  const handleCancelGeneration = () => {
+    cancelGenerationRef.current = true;
+  };
+
   const handleGenerateMedia = async () => {
     if (!hasApiKey && window.aistudio) {
         await handleSelectKey();
     }
 
+    cancelGenerationRef.current = false; // 시작 시 초기화
     setStep('GENERATING');
 
     const frameIds = framesRef.current.map(f => f.id);
@@ -222,6 +230,11 @@ export const App: React.FC = () => {
     };
 
     for (const id of frameIds) {
+      // [기능 4] 취소 버튼 클릭 시 루프 탈출
+      if (cancelGenerationRef.current) {
+        break;
+      }
+
       const frame = framesRef.current.find(f => f.id === id);
       if (!frame) continue;
 
@@ -234,10 +247,6 @@ export const App: React.FC = () => {
       updateFrameState(id, { isGenerating: true, error: undefined });
 
       try {
-          // [방법 1] 오디오 + 이미지를 Promise.all로 동시 생성
-          // - TTS(오디오)와 Imagen(이미지)는 서로 다른 API 엔드포인트를 사용하므로
-          //   Rate Limit 간섭 없이 병렬 실행 가능.
-          // - 순차 실행 대비 컷당 약 37% 시간 단축 (오디오 3s + 이미지 5s → 5s로 단축)
           const tasks: Promise<void>[] = [];
 
           if (!frame.audioGenerated) {
@@ -269,8 +278,6 @@ export const App: React.FC = () => {
               updateFrameState(id, { visualGenerated: true });
           }
 
-          // 두 작업이 모두 완료될 때까지 대기
-          // Promise.allSettled를 사용해 한쪽 실패 시에도 다른 쪽 결과를 보존
           const results = await Promise.allSettled(tasks);
           const failed = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
           if (failed) throw new Error(failed.reason?.message || 'Generation failed');
@@ -282,7 +289,6 @@ export const App: React.FC = () => {
           updateFrameState(id, { isGenerating: false });
       }
 
-      // 컷 간 최소 대기 (API 서버 안정성 확보, 1s → 500ms로 단축)
       await wait(500);
     }
 
@@ -388,6 +394,7 @@ export const App: React.FC = () => {
                 isExportComplete={isExportComplete}
                 onReset={handleReset}
                 onRegenerateFrame={handleRegenerateFrame}
+                onCancelGeneration={handleCancelGeneration}
             />
         )}
 
