@@ -136,15 +136,27 @@ export const exportVideo = async (
     ...dest.stream.getAudioTracks(),
   ]);
 
-  // MIME 타입 선택 (브라우저 호환성)
-  let mimeType = 'video/webm;codecs=vp9';
-  let fileExtension = 'webm';
-  if (MediaRecorder.isTypeSupported('video/mp4')) {
-    mimeType = 'video/mp4';
-    fileExtension = 'mp4';
-  } else if (!MediaRecorder.isTypeSupported(mimeType)) {
-    mimeType = 'video/webm';
-  }
+  /**
+   * [오디오 코덱 수정]
+   * 기존 문제: video/mp4 선택 시 Chrome이 오디오를 Opus로 인코딩하는데,
+   * Opus 코덱은 mp4 컨테이너와 호환되지 않아 Windows 미디어 플레이어 등에서
+   * 오디오가 재생되지 않거나 "지원되지 않는 opus 형식" 오류가 발생.
+   *
+   * 수정: video/mp4 제거, webm+opus 조합을 명시적으로 우선 사용.
+   * - webm;codecs=vp9,opus : VP9(영상) + Opus(오디오) → 가장 안정적인 조합
+   * - webm;codecs=vp8,opus : VP9 미지원 브라우저 폴백
+   * - video/webm            : 최종 폴백 (브라우저 기본 코덱)
+   *
+   * 재생 호환성: VLC, Chrome, Edge, Firefox에서 정상 재생 확인 가능.
+   * Windows 기본 앱(영화 및 TV)에서 .webm 재생이 안 될 경우 VLC 사용 권장.
+   */
+  const MIME_CANDIDATES = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ];
+  const mimeType = MIME_CANDIDATES.find(m => MediaRecorder.isTypeSupported(m)) ?? 'video/webm';
+  const fileExtension = 'webm';
 
   const recorder = new MediaRecorder(combinedStream, { mimeType });
   const chunks: Blob[] = [];
