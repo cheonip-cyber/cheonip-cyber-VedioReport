@@ -18,7 +18,7 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
  * ✅ 테스트 중:  IS_DEMO_MODE = true  → 전체 컷의 50%만 표시
  * 🚀 풀버전 복원: IS_DEMO_MODE = false → 전체 컷 표시 (이 한 줄만 변경 후 push)
  */
-const IS_DEMO_MODE = false;
+const IS_DEMO_MODE = true;
 
 const applyDemoSlice = (allFrames: StoryboardFrame[]): StoryboardFrame[] => {
   if (!IS_DEMO_MODE) return allFrames;
